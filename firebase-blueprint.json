@@ -1,0 +1,107 @@
+{
+  "entities": {
+    "HighScore": {
+      "title": "HighScore",
+      "description": "Global leaderboard entry for endless runner runs",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "User ID of the runner"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name or Minecraft gamertag of the runner"
+        },
+        "score": {
+          "type": "number",
+          "description": "Calculated score based on distance and gold nuggets collected"
+        },
+        "distance": {
+          "type": "number",
+          "description": "Distance in meters ran before game over"
+        },
+        "coins": {
+          "type": "number",
+          "description": "Number of gold nuggets collected"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "ISO timestamp or server time of the score"
+        }
+      },
+      "required": ["userId", "displayName", "score", "distance", "coins"]
+    },
+    "RaceRoom": {
+      "title": "RaceRoom",
+      "description": "Multiplayer race room shared by room code for 2 players",
+      "type": "object",
+      "properties": {
+        "roomCode": {
+          "type": "string",
+          "description": "6-character unique room code"
+        },
+        "seed": {
+          "type": "number",
+          "description": "Deterministic seed for identical obstacle track layout"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["waiting", "countdown", "racing", "finished"],
+          "description": "Current status of the race"
+        },
+        "hostId": {
+          "type": "string",
+          "description": "UID of host player"
+        },
+        "hostName": {
+          "type": "string",
+          "description": "Display name of host player"
+        },
+        "hostProgress": {
+          "type": "object",
+          "description": "Current distance, score, and status of host"
+        },
+        "guestId": {
+          "type": "string",
+          "description": "UID of guest player (optional until joined)"
+        },
+        "guestName": {
+          "type": "string",
+          "description": "Display name of guest player"
+        },
+        "guestProgress": {
+          "type": "object",
+          "description": "Current distance, score, and status of guest"
+        },
+        "winnerId": {
+          "type": "string",
+          "description": "UID of the winner when race finishes"
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Last progress update timestamp"
+        }
+      },
+      "required": ["roomCode", "seed", "status", "hostId", "hostName"]
+    }
+  },
+  "firestore": {
+    "/highScores/{scoreId}": {
+      "schema": {
+        "$ref": "#/entities/HighScore"
+      },
+      "description": "Stores individual high score submissions for global leaderboard"
+    },
+    "/rooms/{roomId}": {
+      "schema": {
+        "$ref": "#/entities/RaceRoom"
+      },
+      "description": "Stores 1v1 multiplayer race rooms and real-time racer coordinates"
+    }
+  }
+}

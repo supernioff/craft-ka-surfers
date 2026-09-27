@@ -1,0 +1,179 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-minecraft {
+    font-family: 'Press Start 2P', monospace;
+  }
+}
+
+body, html {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  overflow: hidden;
+  background-color: #0d1117;
+}
+
+/* Cinematic Title Flying Out Of Screen Animation */
+@keyframes titleFlyOut {
+  0% {
+    transform: perspective(1000px) translateZ(-800px) scale(0.1) rotateX(40deg);
+    opacity: 0;
+    filter: blur(12px) brightness(3);
+  }
+  50% {
+    transform: perspective(1000px) translateZ(80px) scale(1.12) rotateX(-5deg);
+    opacity: 1;
+    filter: blur(0px) brightness(1.4);
+  }
+  75% {
+    transform: perspective(1000px) translateZ(0px) scale(1.0) rotateX(0deg);
+    opacity: 1;
+    filter: brightness(1.1);
+  }
+  100% {
+    transform: perspective(1000px) translateZ(20px) scale(1.03) rotateX(2deg);
+    opacity: 1;
+    filter: brightness(1);
+  }
+}
+
+@keyframes godRaysRotate {
+  0% {
+    transform: rotate(0deg) scale(1.2);
+  }
+  100% {
+    transform: rotate(360deg) scale(1.2);
+  }
+}
+
+@keyframes slowFadeToBlack {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.animate-title-flyout {
+  animation: titleFlyOut 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-style: preserve-3d;
+}
+
+.animate-god-rays {
+  animation: godRaysRotate 24s linear infinite;
+}
+
+.animate-fade-to-black {
+  animation: slowFadeToBlack 1.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+/* 3D Flying Minecraft Logo Animation */
+@keyframes flyInLogo {
+  0% {
+    transform: perspective(800px) rotateX(35deg) rotateY(-15deg) scale(0.4) translateY(-80px);
+    opacity: 0;
+  }
+  60% {
+    transform: perspective(800px) rotateX(-8deg) rotateY(6deg) scale(1.06) translateY(5px);
+    opacity: 1;
+  }
+  100% {
+    transform: perspective(800px) rotateX(8deg) rotateY(-4deg) scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes floatBob {
+  0%, 100% {
+    transform: perspective(800px) rotateX(8deg) rotateY(-4deg) translateY(0px);
+  }
+  50% {
+    transform: perspective(800px) rotateX(4deg) rotateY(-2deg) translateY(-8px);
+  }
+}
+
+@keyframes splashPulse {
+  0%, 100% {
+    transform: rotate(-14deg) scale(1);
+  }
+  50% {
+    transform: rotate(-14deg) scale(1.15);
+  }
+}
+
+.mc-flying-logo {
+  animation: flyInLogo 0.9s cubic-bezier(0.16, 1, 0.3, 1) forwards, floatBob 4s ease-in-out 0.9s infinite;
+  transform-style: preserve-3d;
+}
+
+.mc-splash-text {
+  animation: splashPulse 1.8s ease-in-out infinite;
+  text-shadow: 2px 2px 0px #000, 3px 3px 0px #3f3f00;
+}
+
+/* 3D Minecraft Extruded Block Letters */
+.mc-block-letter {
+  display: inline-block;
+  color: #d1d5db;
+  text-shadow: 
+    0 1px 0 #9ca3af,
+    0 2px 0 #6b7280,
+    0 3px 0 #4b5563,
+    0 4px 0 #374151,
+    0 5px 0 #1f2937,
+    0 6px 4px rgba(0, 0, 0, 0.7);
+  letter-spacing: 2px;
+}
+
+/* Custom Minecraft 3D button styling */
+.mc-button {
+  font-family: 'Press Start 2P', monospace;
+  background-color: #727272;
+  border-top: 3px solid #aeaeae;
+  border-left: 3px solid #aeaeae;
+  border-right: 3px solid #363636;
+  border-bottom: 3px solid #363636;
+  box-shadow: inset -2px -2px 0px #212121;
+  text-shadow: 2px 2px 0px #1a1a1a;
+  transition: transform 0.05s ease, filter 0.1s ease;
+}
+
+.mc-button:hover {
+  filter: brightness(1.1);
+  background-color: #7b7b7b;
+}
+
+.mc-button:active {
+  border-top: 3px solid #363636;
+  border-left: 3px solid #363636;
+  border-right: 3px solid #aeaeae;
+  border-bottom: 3px solid #aeaeae;
+  transform: translateY(2px);
+}
+
+.mc-button-green {
+  background-color: #2e8540;
+  border-top-color: #5bb36d;
+  border-left-color: #5bb36d;
+  border-right-color: #1a4f26;
+  border-bottom-color: #1a4f26;
+}
+
+.mc-button-green:hover {
+  background-color: #389e4c;
+}
+
+.mc-button-red {
+  background-color: #9e2a2b;
+  border-top-color: #d04546;
+  border-left-color: #d04546;
+  border-right-color: #541617;
+  border-bottom-color: #541617;
+}
+
+.mc-button-red:hover {
+  background-color: #b73233;
+}
+

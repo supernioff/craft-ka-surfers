@@ -1,0 +1,39 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection test document
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // High Scores Collection
+    match /highScores/{scoreId} {
+      allow read: if true;
+      allow create, update: if request.resource.data.score is number
+        && request.resource.data.score >= 0
+        && request.resource.data.distance is number
+        && request.resource.data.coins is number
+        && request.resource.data.userId is string
+        && request.resource.data.userId.size() >= 2
+        && request.resource.data.userId.size() <= 64
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() <= 64;
+      allow delete: if false;
+    }
+
+    // Multiplayer Race Rooms Collection
+    match /rooms/{roomId} {
+      allow read: if true;
+      allow create: if request.resource.data.roomCode is string
+        && request.resource.data.roomCode.size() <= 10
+        && request.resource.data.hostId is string;
+      allow update: if true;
+      allow delete: if true;
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Craft Ka Surfers",
+  "description": "Craft Ka Surfers - A 3D endless runner where players dash down canyon railway tracks, dodge runaway TNT minecarts and obstacles, and collect diamonds while outrunning the Inspector.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
