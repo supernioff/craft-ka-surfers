@@ -119,6 +119,14 @@ export class Engine3D {
   private targetX = 0;
   private baseSpeed = 22; // m/s
   private speed = 22;
+  private baseFov = 64;
+  private baseCamZOffset = 6.8;
+  private baseCamYOffset = 4.8;
+  private baseLookAtY = 2.0;
+
+  // Pre-allocated collision hitboxes to prevent GC thrashing and lag
+  private playerBox = new THREE.Box3();
+  private obsBox = new THREE.Box3();
 
   private resizeObserver: ResizeObserver | null = null;
 
@@ -172,9 +180,9 @@ export class Engine3D {
       preserveDrawingBuffer: false,
     });
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     container.innerHTML = '';
     container.appendChild(this.renderer.domElement);
 
@@ -196,8 +204,8 @@ export class Engine3D {
     this.sunLight = new THREE.DirectionalLight(initialTheme.sunColor, initialTheme.sunIntensity);
     this.sunLight.position.set(25, 45, 20);
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.mapSize.width = 1024;
-    this.sunLight.shadow.mapSize.height = 1024;
+    this.sunLight.shadow.mapSize.width = 512;
+    this.sunLight.shadow.mapSize.height = 512;
     this.sunLight.shadow.camera.near = 0.5;
     this.sunLight.shadow.camera.far = 120;
     this.sunLight.shadow.camera.left = -20;
@@ -1012,8 +1020,10 @@ export class Engine3D {
     this.chaserGroup.visible = false;
     this.ghostDog.group.visible = false;
 
-    // Center camera on track overview
-    this.camera.position.set(0, 4.8, 6.8);
+    // Center camera on track overview with responsive framing
+    const width = this.container?.clientWidth || window.innerWidth;
+    const height = this.container?.clientHeight || window.innerHeight;
+    this.updateCameraProjection(width, height);
     this.camera.lookAt(0, 2.0, -10);
   }
 
@@ -1067,9 +1077,9 @@ export class Engine3D {
     // Dynamic Tempo Sync with Cyber Synthwave Soundtrack
     sound.setSpeedBpmMultiplier(this.speed / this.baseSpeed);
 
-    // Dynamic Camera FOV (Only update projection matrix when FOV changes)
-    const targetFov = 66 + Math.min(8, (this.speed - this.baseSpeed) * 0.35);
-    if (Math.abs(targetFov - this.camera.fov) > 0.08) {
+    // Dynamic Camera FOV (Maintains responsive base FOV for different screen aspects)
+    const targetFov = this.baseFov + Math.min(6, (this.speed - this.baseSpeed) * 0.25);
+    if (Math.abs(targetFov - this.camera.fov) > 0.05) {
       this.camera.fov += (targetFov - this.camera.fov) * (2 * delta);
       this.camera.updateProjectionMatrix();
     }
@@ -1299,13 +1309,13 @@ export class Engine3D {
     // Camera follow: Smooth, rock-solid tracking (ZERO SCREEN SHAKE ON TURNS!)
     const targetCamX = this.targetX * 0.48;
     this.camera.position.x += (targetCamX - this.camera.position.x) * Math.min(1, 10 * delta);
-    this.camera.position.z = this.playerState.z + 6.8;
-    this.camera.position.y = 4.8 + (this.playerState.y * 0.12);
+    this.camera.position.z = this.playerState.z + this.baseCamZOffset;
+    this.camera.position.y = this.baseCamYOffset + (this.playerState.y * 0.12);
 
     // Look straight forward along camera's track trajectory (NO opposing lateral yaw!)
     this.camera.lookAt(
       this.camera.position.x * 0.65,
-      2.1 + this.playerState.y * 0.12,
+      this.baseLookAtY + this.playerState.y * 0.12,
       this.playerState.z - 15
     );
 
@@ -1318,19 +1328,18 @@ export class Engine3D {
   }
 
   private updateObstacles(delta: number) {
-    const playerBox = new THREE.Box3();
     const px = this.playerGroup.position.x;
     const py = this.playerGroup.position.y;
     const pz = this.playerGroup.position.z;
 
     if (this.playerState.isSliding) {
       // Low profile hitbox when sliding
-      playerBox.min.set(px - 0.35, 0, pz - 0.7);
-      playerBox.max.set(px + 0.35, 0.7, pz + 0.7);
+      this.playerBox.min.set(px - 0.35, 0, pz - 0.7);
+      this.playerBox.max.set(px + 0.35, 0.7, pz + 0.7);
     } else {
       // Standing / Jumping hitbox
-      playerBox.min.set(px - 0.35, py, pz - 0.35);
-      playerBox.max.set(px + 0.35, py + 1.8, pz + 0.35);
+      this.playerBox.min.set(px - 0.35, py, pz - 0.35);
+      this.playerBox.max.set(px + 0.35, py + 1.8, pz + 0.35);
     }
 
     for (let i = this.obstacles.length - 1; i >= 0; i--) {
@@ -1352,7 +1361,6 @@ export class Engine3D {
 
       // Check collision if obstacle is near player
       if (Math.abs(obs.z - pz) < 4.0 && obs.mesh) {
-        const obsBox = new THREE.Box3();
         const ox = obs.mesh.position.x;
         const oy = obs.mesh.position.y;
         const oz = obs.mesh.position.z;
@@ -1361,16 +1369,16 @@ export class Engine3D {
           // Floating Ghost Hurdle:
           // Clearance underneath from Y=0 to 0.85m allows sliding cleanly underneath!
           // BUT standing (Y=0 to 1.8) or jumping (Y=0.5 to 2.4) into it is FATAL!
-          obsBox.min.set(ox - obs.width / 2, oy + 0.85, oz - obs.depth / 2);
-          obsBox.max.set(ox + obs.width / 2, oy + 2.35, oz + obs.depth / 2);
+          this.obsBox.min.set(ox - obs.width / 2, oy + 0.85, oz - obs.depth / 2);
+          this.obsBox.max.set(ox + obs.width / 2, oy + 2.35, oz + obs.depth / 2);
         } else {
           // Minecart Trolley or Rock: on the ground. Steve can jump over rocks!
-          obsBox.min.set(ox - obs.width / 2, oy, oz - obs.depth / 2);
-          obsBox.max.set(ox + obs.width / 2, oy + obs.height, oz + obs.depth / 2);
+          this.obsBox.min.set(ox - obs.width / 2, oy, oz - obs.depth / 2);
+          this.obsBox.max.set(ox + obs.width / 2, oy + obs.height, oz + obs.depth / 2);
         }
 
         // Intersects?
-        if (playerBox.intersectsBox(obsBox)) {
+        if (this.playerBox.intersectsBox(this.obsBox)) {
           if (this.playerState.invincibleTimer > 0) {
             // Enchanted Golden Apple blasts through!
             this.scene.remove(obs.mesh);
@@ -1521,22 +1529,38 @@ export class Engine3D {
     this.camera.aspect = aspect;
 
     if (aspect < 0.6) {
-      // Tall narrow portrait phone (e.g. 9:19.5, 9:20)
-      this.camera.fov = 78;
-      this.camera.position.set(0, 5.2, 7.5);
-    } else if (aspect < 0.9) {
+      // Tall narrow portrait phone (e.g. 9:19.5, 9:20, 9:21, modern Galaxy & iPhone)
+      this.baseFov = 78;
+      this.baseCamZOffset = 8.4;
+      this.baseCamYOffset = 5.6;
+      this.baseLookAtY = 2.4;
+    } else if (aspect < 0.85) {
       // Standard mobile portrait (9:16)
-      this.camera.fov = 72;
-      this.camera.position.set(0, 5.0, 7.1);
+      this.baseFov = 74;
+      this.baseCamZOffset = 7.8;
+      this.baseCamYOffset = 5.2;
+      this.baseLookAtY = 2.2;
     } else if (aspect < 1.25) {
-      // Tablet portrait / iPad
-      this.camera.fov = 68;
-      this.camera.position.set(0, 4.9, 6.9);
+      // Tablet portrait / iPad / Square
+      this.baseFov = 68;
+      this.baseCamZOffset = 7.2;
+      this.baseCamYOffset = 5.0;
+      this.baseLookAtY = 2.1;
+    } else if (aspect > 2.0) {
+      // Ultrawide displays
+      this.baseFov = 60;
+      this.baseCamZOffset = 6.4;
+      this.baseCamYOffset = 4.6;
+      this.baseLookAtY = 1.9;
     } else {
-      // Standard landscape desktop / laptop (16:9, 16:10, ultrawide)
-      this.camera.fov = 64;
-      this.camera.position.set(0, 4.8, 6.8);
+      // Standard landscape desktop / laptop (16:9, 16:10)
+      this.baseFov = 64;
+      this.baseCamZOffset = 6.8;
+      this.baseCamYOffset = 4.8;
+      this.baseLookAtY = 2.0;
     }
+    this.camera.fov = this.baseFov;
+    this.camera.position.set(0, this.baseCamYOffset, this.baseCamZOffset);
     this.camera.updateProjectionMatrix();
   }
 
@@ -1546,7 +1570,7 @@ export class Engine3D {
     const height = this.container.clientHeight || window.innerHeight;
     this.updateCameraProjection(width, height);
     this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   };
 
   public reset(seed: number = Date.now()) {

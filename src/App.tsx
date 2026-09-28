@@ -242,11 +242,44 @@ export default function App() {
     setIsBgmMuted(nextState);
   };
 
+  // Sync music mode with menu vs running state
+  useEffect(() => {
+    sound.setMenuMode(gameState === 'menu' || gameState === 'gameover');
+    if (!isBgmMuted) {
+      sound.ensureBGM();
+    }
+  }, [gameState, isBgmMuted]);
+
+  // Unlock Web Audio context and start chill vibe BGM on first user touch/click anywhere
+  useEffect(() => {
+    const handleFirstInteraction = () => {
+      sound.initCtx();
+      sound.setMenuMode(gameStateRef.current === 'menu' || gameStateRef.current === 'gameover');
+      if (!sound.isBgmMuted()) {
+        sound.ensureBGM();
+      }
+      window.removeEventListener('pointerdown', handleFirstInteraction);
+      window.removeEventListener('keydown', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
+    };
+
+    window.addEventListener('pointerdown', handleFirstInteraction, { passive: true });
+    window.addEventListener('keydown', handleFirstInteraction, { passive: true });
+    window.addEventListener('touchstart', handleFirstInteraction, { passive: true });
+
+    return () => {
+      window.removeEventListener('pointerdown', handleFirstInteraction);
+      window.removeEventListener('keydown', handleFirstInteraction);
+      window.removeEventListener('touchstart', handleFirstInteraction);
+    };
+  }, []);
+
   // Handle Game Over
   const handleGameOver = useCallback(async (finalState: PlayerState) => {
     if (gameStateRef.current !== 'playing') return;
     setGameState('gameover');
-    sound.stopBGM();
+    // Keep vibey music flowing in chill background mode during death screen!
+    sound.setMenuMode(true);
 
     const currentScore = finalState.score;
     const isNewBest = currentScore > personalBest;
@@ -316,6 +349,7 @@ export default function App() {
     setIsRaceFinished(false);
     setRaceWinnerName(null);
 
+    sound.setMenuMode(false);
     sound.startBGM();
 
     if (engineRef.current) {
@@ -503,11 +537,11 @@ export default function App() {
       {gameState === 'menu' && (
         <div
           id="title-screen-overlay"
-          className="absolute inset-0 z-20 flex flex-col items-center justify-between p-3 sm:p-5 overflow-y-auto"
+          className="absolute inset-0 z-20 flex flex-col items-center justify-between p-2.5 sm:p-4 overflow-y-auto"
           style={{
             background: 'radial-gradient(ellipse at center, rgba(10, 14, 20, 0.45) 0%, rgba(5, 7, 10, 0.92) 100%)',
-            paddingTop: 'max(env(safe-area-inset-top, 0px), 0.75rem)',
-            paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0.75rem)',
+            paddingTop: 'max(env(safe-area-inset-top, 0px), 0.5rem)',
+            paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 0.5rem)',
           }}
         >
           {/* Top Navigation Bar: Google Sign In, Miner ID & Sound */}
@@ -596,12 +630,14 @@ export default function App() {
                 className={`p-2 sm:p-2.5 backdrop-blur-md rounded-xl border transition-all cursor-pointer flex items-center gap-1.5 ${
                   isBgmMuted
                     ? 'bg-slate-900/70 border-slate-700/50 text-slate-500 hover:text-slate-300'
-                    : 'bg-amber-600/30 border-amber-500/50 text-amber-300 shadow'
+                    : 'bg-amber-600/35 border-amber-500/60 text-amber-300 shadow ring-1 ring-amber-400/40'
                 }`}
-                title={isBgmMuted ? 'Unmute Music' : 'Mute Music'}
+                title={isBgmMuted ? 'Unmute Vibe Music' : 'Mute Vibe Music'}
               >
-                <Music className="w-4 h-4" />
-                <span className="text-[10px] font-mono hidden md:inline">{isBgmMuted ? 'MUSIC OFF' : 'MUSIC ON'}</span>
+                <Music className={`w-4 h-4 ${!isBgmMuted ? 'animate-pulse text-amber-300' : 'text-slate-400'}`} />
+                <span className="text-[10px] font-mono hidden min-[480px]:inline">
+                  {isBgmMuted ? 'MUSIC OFF' : 'VIBE MUSIC ON'}
+                </span>
               </button>
 
               <button
@@ -619,7 +655,7 @@ export default function App() {
                 ) : (
                   <Volume2 className="w-4 h-4 text-cyan-300" />
                 )}
-                <span className="text-[10px] font-mono hidden md:inline">{isSfxMuted ? 'SFX OFF' : 'SFX ON'}</span>
+                <span className="text-[10px] font-mono hidden min-[480px]:inline">{isSfxMuted ? 'SFX OFF' : 'SFX ON'}</span>
               </button>
             </div>
           </div>
@@ -779,6 +815,8 @@ export default function App() {
           onToggleBgm={handleToggleBgm}
           onPause={() => {
             setGameState('menu');
+            sound.setMenuMode(true);
+            sound.ensureBGM();
             engineRef.current?.pauseToMenu();
           }}
           onMoveLeft={handleMoveLeft}
@@ -840,6 +878,8 @@ export default function App() {
           onHome={() => {
             setGameState('menu');
             setActiveRoom(null);
+            sound.setMenuMode(true);
+            sound.ensureBGM();
             engineRef.current?.pauseToMenu();
           }}
           onOpenLeaderboard={() => setIsLeaderboardOpen(true)}

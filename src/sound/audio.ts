@@ -22,9 +22,12 @@ class SoundEngine {
   private sfxMuted: boolean = false;
   private bgmVolume: number = 0.65;
   private sfxVolume: number = 0.8;
+  private isInMenu: boolean = true;
+  private bgmFilter: BiquadFilterNode | null = null;
+  private noiseBuffer: AudioBuffer | null = null;
 
-  // Music Sequencer State
-  private bpm: number = 132;
+  // Music Sequencer State (Groovy 128 BPM Vibe)
+  private bpm: number = 128;
   private step: number = 0;
   private nextStepTime: number = 0;
   private schedulerTimer: number | null = null;
@@ -59,19 +62,54 @@ class SoundEngine {
         this.masterGain.gain.setValueAtTime(1.0, this.ctx.currentTime);
         this.masterGain.connect(this.ctx.destination);
 
+        // BGM Warm Low-Pass Filter (gentle relaxing vibe in menu, wide open in-game)
+        this.bgmFilter = this.ctx.createBiquadFilter();
+        this.bgmFilter.type = 'lowpass';
+        this.bgmFilter.frequency.setValueAtTime(this.isInMenu ? 2600 : 15000, this.ctx.currentTime);
+        this.bgmFilter.connect(this.masterGain);
+
         // BGM Gain
         this.bgmGain = this.ctx.createGain();
-        this.bgmGain.gain.setValueAtTime(this.bgmMuted ? 0 : this.bgmVolume * 0.45, this.ctx.currentTime);
-        this.bgmGain.connect(this.masterGain);
+        this.bgmGain.gain.setValueAtTime(this.bgmMuted ? 0 : this.bgmVolume * 0.48, this.ctx.currentTime);
+        this.bgmGain.connect(this.bgmFilter);
 
         // SFX Gain
         this.sfxGain = this.ctx.createGain();
         this.sfxGain.gain.setValueAtTime(this.sfxMuted ? 0 : this.sfxVolume * 0.75, this.ctx.currentTime);
         this.sfxGain.connect(this.masterGain);
+
+        // Pre-render a 2.0s looping white noise buffer ONCE to eliminate all GC stalls and CPU hang
+        const noiseLen = Math.floor(this.ctx.sampleRate * 2.0);
+        this.noiseBuffer = this.ctx.createBuffer(1, noiseLen, this.ctx.sampleRate);
+        const noiseData = this.noiseBuffer.getChannelData(0);
+        for (let i = 0; i < noiseLen; i++) {
+          noiseData[i] = (Math.random() * 2 - 1) * 0.45;
+        }
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
       this.ctx.resume();
+    }
+  }
+
+  public setMenuMode(inMenu: boolean) {
+    this.isInMenu = inMenu;
+    if (this.bgmFilter && this.ctx) {
+      const targetFreq = inMenu ? 3400 : 16000;
+      this.bgmFilter.frequency.setTargetAtTime(targetFreq, this.ctx.currentTime, 0.25);
+    }
+    // Relaxed vibey tempo on menu, energetic tempo in game
+    if (inMenu) {
+      this.bpm = 118;
+    } else {
+      this.bpm = 132;
+    }
+  }
+
+  public ensureBGM() {
+    this.initCtx();
+    if (!this.isBgmPlaying && !this.bgmMuted) {
+      this.startBGM();
     }
   }
 
@@ -178,7 +216,16 @@ class SoundEngine {
     if (!this.ctx || !this.isBgmPlaying) return;
     const scheduleAheadTime = 0.12;
 
-    while (this.nextStepTime < this.ctx.currentTime + scheduleAheadTime) {
+    // PROTECTION AGAINST DESYNC AND HANG:
+    // If browser lagged, was backgrounded, or CPU throttled, nextStepTime can fall in the past.
+    // Clamping to currentTime ensures we never burst-generate hundreds of audio nodes and freeze!
+    if (this.nextStepTime < this.ctx.currentTime - 0.08) {
+      this.nextStepTime = this.ctx.currentTime + 0.02;
+    }
+
+    let loopGuard = 0;
+    while (this.nextStepTime < this.ctx.currentTime + scheduleAheadTime && loopGuard < 8) {
+      loopGuard++;
       this.scheduleStep(this.step, this.nextStepTime);
       const stepDuration = 60.0 / (this.bpm * 4); // 16th-note duration
       this.nextStepTime += stepDuration;
@@ -192,96 +239,118 @@ class SoundEngine {
   private scheduleStep(step: number, time: number) {
     if (!this.ctx || !this.bgmGain) return;
 
-    // DRUMS: 16th-note grid
+    // 16th-note grid
     const isQuarter = step % 4 === 0;
     const isOffbeatQuarter = step % 4 === 2;
 
-    // 1. Cyber Kick Drum: Beats 0, 4, 8, 12... (Four-on-the-floor)
-    if (isQuarter) {
-      this.playSynthKick(time);
+    if (this.isInMenu) {
+      // -------------------------------------------------------------------
+      // CHILL LO-FI MENU VIBE GROOVE (Relaxed, head-bobbing, soothing)
+      // -------------------------------------------------------------------
+      // Gentle kick on 0 and 8, subtle syncopated ghost on 10
+      if (step % 16 === 0 || step % 16 === 8 || step % 16 === 10) {
+        this.playSynthKick(time);
+      }
+
+      // Soft rim / snare on beats 2 & 4 (steps 4 & 12)
+      if (step % 8 === 4) {
+        this.playSynthSnare(time);
+      }
+
+      // Soft relaxed hi-hat on every 8th note
+      if (step % 2 === 0) {
+        this.playSynthHiHat(time, step % 8 === 6);
+      }
+    } else {
+      // -------------------------------------------------------------------
+      // HIGH-ENERGY RUNNER BEAT (Driving, crisp, adrenaline pumping)
+      // -------------------------------------------------------------------
+      // 1. Kick Drum: punchy bouncy kick on beats 0, 4, 8, 12 plus syncopated groove on 10
+      if (isQuarter || (step % 16 === 10)) {
+        this.playSynthKick(time);
+      }
+
+      // 2. Snare: Crisp warm snare on beats 4 and 12
+      if (step % 8 === 4) {
+        this.playSynthSnare(time);
+      }
+
+      // 3. Hi-Hat: Crisp 16th note groove with open hats on offbeat quarters
+      if (step % 2 === 0) {
+        const isOpen = isOffbeatQuarter && (step % 8 === 2 || step % 8 === 6);
+        this.playSynthHiHat(time, isOpen);
+      }
     }
 
-    // 2. Punchy Cyber Snare: Beats 4, 12, 20, 28... (Beats 2 & 4 of each bar)
-    if (step % 8 === 4) {
-      this.playSynthSnare(time);
-    }
-
-    // 3. Fast 16th-note Cyber Hi-Hat
-    if (step % 2 === 0) {
-      const isOpen = isOffbeatQuarter && (step % 8 === 2 || step % 8 === 6);
-      this.playSynthHiHat(time, isOpen);
-    }
-
-    // 4. Rolling Cyber 16th Bassline (D minor -> F -> C -> Bb progression)
-    // Scale: D1 (36.7), F1 (43.6), C1 (32.7), Bb0 (29.14), A0 (27.5)
+    // 4. Harmonic Progression: 4-Bar Lo-Fi Synthwave Vibe (Fmaj9 -> Am7 -> Dm9 -> Bbmaj9)
     const bar = Math.floor(step / 16);
-    let rootFreq = 73.42; // D2
-    let chordPads = [293.66, 349.23, 440.0]; // D minor triad
+    let rootFreq = 87.31; // F2
+    let chordPads = [174.61, 220.0, 261.63, 329.63]; // Fmaj7 (F3, A3, C4, E4)
+
     if (bar === 1) {
-      rootFreq = 87.31; // F2
-      chordPads = [349.23, 440.0, 523.25]; // F major triad
+      rootFreq = 110.0; // A2
+      chordPads = [196.0, 261.63, 329.63, 392.0]; // Am7 (G3, C4, E4, G4)
     } else if (bar === 2) {
-      rootFreq = 65.41; // C2
-      chordPads = [261.63, 329.63, 392.0]; // C major triad
+      rootFreq = 73.42; // D2
+      chordPads = [146.83, 174.61, 220.0, 261.63]; // Dm9 (D3, F3, A3, C4)
     } else if (bar === 3) {
       rootFreq = 58.27; // Bb1
-      chordPads = [233.08, 293.66, 349.23]; // Bb major triad
+      chordPads = [116.54, 174.61, 220.0, 261.63]; // Bbmaj7 (Bb2, F3, A3, C4)
     }
 
-    // Play lush background pad chord at the start of each bar for seamless flow
+    // Warm sustained atmospheric pad chord on each bar
     if (step % 16 === 0) {
       this.playAtmosphericPad(time, chordPads);
     }
 
-    // Rolling smooth bass with gentle envelope
-    const isOctave = step % 2 === 1;
-    const bassFreq = isOctave ? rootFreq * 2 : rootFreq;
-    const bassAccent = step % 4 === 0;
-    this.playCyberBass(time, bassFreq, bassAccent);
+    // Bouncy syncopated funk sub-bass (groovy rhythm on 0, 3, 6, 8, 10, 14)
+    const subStep = step % 16;
+    const isBassNote = subStep === 0 || subStep === 3 || subStep === 6 || subStep === 8 || subStep === 10 || subStep === 14;
+    if (isBassNote) {
+      const isOctavePop = subStep === 6 || subStep === 14;
+      const bassFreq = isOctavePop ? rootFreq * 2 : rootFreq;
+      this.playCyberBass(time, bassFreq, subStep === 0 || subStep === 8);
+    }
 
-    // 5. Flowing Neon Lead Melodies (Smooth legato synthwave lead)
+    // 5. Catchy Vibe Melody Hook (Warm, uplifting, deeply chill and memorable)
     const leadPatternsA = [
-      587.33, 440.0, 523.25, 392.0,  // D5, A4, C5, G4
-      587.33, 659.25, 523.25, 440.0, // D5, E5, C5, A4
-      698.46, 587.33, 523.25, 440.0, // F5, D5, C5, A4
-      587.33, 523.25, 440.0, 392.0,  // D5, C5, A4, G4
+      523.25, 0, 440.0, 523.25, 587.33, 0, 659.25, 0, // C5, -, A4, C5, D5, -, E5, -
+      783.99, 659.25, 587.33, 0, 523.25, 587.33, 440.0, 0, // G5, E5, D5, -, C5, D5, A4, -
     ];
 
     const leadPatternsB = [
-      440.0, 523.25, 587.33, 659.25, // A4, C5, D5, E5
-      698.46, 587.33, 523.25, 440.0, // F5, D5, C5, A4
-      392.0, 440.0, 523.25, 587.33,  // G4, A4, C5, D5
-      523.25, 440.0, 392.0, 329.63,  // C5, A4, G4, E4
+      698.46, 0, 659.25, 587.33, 523.25, 0, 587.33, 0, // F5, -, E5, D5, C5, -, D5, -
+      523.25, 440.0, 392.0, 0, 440.0, 523.25, 349.23, 0, // C5, A4, G4, -, A4, C5, F4, -
     ];
 
-    const leadPattern = this.currentPattern === 0 ? leadPatternsA : leadPatternsB;
+    const leadPattern = (bar % 2 === 0 ? leadPatternsA : leadPatternsB);
     const leadNote = leadPattern[step % 16];
 
-    // Smooth flowing melody on rhythmic 8th and 16th beats
-    if (step % 2 === 0 || (step % 8 === 3 || step % 8 === 7)) {
-      this.playNeonLead(time, leadNote, step % 4 === 0);
+    if (leadNote && leadNote > 0) {
+      this.playNeonLead(time, leadNote, step % 8 === 0);
     }
   }
 
   private playAtmosphericPad(time: number, frequencies: number[]) {
     if (!this.ctx || !this.bgmGain) return;
-    const dur = 60.0 / this.bpm * 4.0; // Full 1-bar sustained pad
+    const dur = (60.0 / this.bpm) * 3.8; // Full bar sustained chord
 
-    frequencies.forEach((freq) => {
+    frequencies.forEach((freq, idx) => {
       if (!this.ctx || !this.bgmGain) return;
       const osc = this.ctx.createOscillator();
       const filter = this.ctx.createBiquadFilter();
       const gain = this.ctx.createGain();
 
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq * 0.5, time);
+      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(freq, time);
 
       filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(800, time);
+      filter.frequency.setValueAtTime(this.isInMenu ? 900 : 1800, time);
 
+      const targetVol = this.isInMenu ? 0.05 : 0.07;
       gain.gain.setValueAtTime(0.001, time);
-      gain.gain.linearRampToValueAtTime(0.06, time + 0.3);
-      gain.gain.setValueAtTime(0.06, time + dur - 0.3);
+      gain.gain.linearRampToValueAtTime(targetVol, time + 0.35);
+      gain.gain.setValueAtTime(targetVol, time + dur - 0.4);
       gain.gain.linearRampToValueAtTime(0.001, time + dur);
 
       osc.connect(filter);
@@ -299,17 +368,19 @@ class SoundEngine {
     const gain = this.ctx.createGain();
 
     osc.type = 'sine';
-    osc.frequency.setValueAtTime(140, time);
-    osc.frequency.exponentialRampToValueAtTime(36, time + 0.12);
+    const startPitch = this.isInMenu ? 115 : 135;
+    osc.frequency.setValueAtTime(startPitch, time);
+    osc.frequency.exponentialRampToValueAtTime(36, time + 0.11);
 
-    gain.gain.setValueAtTime(0.48, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.18);
+    const targetVol = this.isInMenu ? 0.22 : 0.45;
+    gain.gain.setValueAtTime(targetVol, time);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.17);
 
     osc.connect(gain);
     gain.connect(this.bgmGain);
 
     osc.start(time);
-    osc.stop(time + 0.2);
+    osc.stop(time + 0.19);
   }
 
   private playSynthSnare(time: number) {
@@ -319,60 +390,57 @@ class SoundEngine {
     const osc = this.ctx.createOscillator();
     const oscGain = this.ctx.createGain();
     osc.type = 'triangle';
-    osc.frequency.setValueAtTime(185, time);
-    osc.frequency.exponentialRampToValueAtTime(80, time + 0.08);
-    oscGain.gain.setValueAtTime(0.25, time);
-    oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+    osc.frequency.setValueAtTime(175, time);
+    osc.frequency.exponentialRampToValueAtTime(70, time + 0.09);
+    const bodyVol = this.isInMenu ? 0.11 : 0.24;
+    oscGain.gain.setValueAtTime(bodyVol, time);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, time + 0.11);
     osc.connect(oscGain);
     oscGain.connect(this.bgmGain);
     osc.start(time);
     osc.stop(time + 0.12);
 
-    // Noise burst with high-pass filter
-    const bufferSize = this.ctx.sampleRate * 0.14;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.7;
+    // Noise burst using pre-rendered noiseBuffer (ZERO ALLOCATION!)
+    if (this.noiseBuffer) {
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.noiseBuffer;
+      noise.loop = true;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.setValueAtTime(this.isInMenu ? 1400 : 1000, time);
+
+      const noiseGain = this.ctx.createGain();
+      const noiseVol = this.isInMenu ? 0.08 : 0.18;
+      noiseGain.gain.setValueAtTime(noiseVol, time);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.13);
+
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.bgmGain);
+
+      noise.start(time);
+      noise.stop(time + 0.14);
     }
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
-
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'highpass';
-    filter.frequency.setValueAtTime(900, time);
-
-    const noiseGain = this.ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.22, time);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
-
-    noise.connect(filter);
-    filter.connect(noiseGain);
-    noiseGain.connect(this.bgmGain);
-
-    noise.start(time);
-    noise.stop(time + 0.15);
   }
 
   private playSynthHiHat(time: number, isOpen: boolean) {
-    if (!this.ctx || !this.bgmGain) return;
-    const dur = isOpen ? 0.12 : 0.04;
-    const bufferSize = Math.floor(this.ctx.sampleRate * dur);
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * 0.4;
-    }
+    if (!this.ctx || !this.bgmGain || !this.noiseBuffer) return;
+    const dur = isOpen ? 0.11 : 0.035;
+
+    // Zero-allocation hi-hat from pre-rendered noise buffer
     const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
+    noise.buffer = this.noiseBuffer;
+    noise.loop = true;
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(7500, time);
-    filter.Q.setValueAtTime(3.0, time);
+    filter.frequency.setValueAtTime(7800, time);
+    filter.Q.setValueAtTime(2.8, time);
 
     const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(isOpen ? 0.14 : 0.08, time);
+    const targetVol = this.isInMenu ? (isOpen ? 0.06 : 0.035) : (isOpen ? 0.12 : 0.07);
+    gain.gain.setValueAtTime(targetVol, time);
     gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
 
     noise.connect(filter);
@@ -392,23 +460,24 @@ class SoundEngine {
     osc.type = 'sawtooth';
     osc.frequency.setValueAtTime(freq, time);
 
-    // Filter sweep for pumping synthwave bass
+    // Warm, bouncy filter envelope
     filter.type = 'lowpass';
-    filter.Q.setValueAtTime(4.0, time);
-    const filterStart = accent ? 1800 : 950;
+    filter.Q.setValueAtTime(3.5, time);
+    const filterStart = accent ? (this.isInMenu ? 950 : 1400) : (this.isInMenu ? 620 : 850);
     filter.frequency.setValueAtTime(filterStart, time);
-    filter.frequency.exponentialRampToValueAtTime(220, time + 0.12);
+    filter.frequency.exponentialRampToValueAtTime(140, time + 0.14);
 
-    const vol = accent ? 0.35 : 0.26;
+    const baseVol = accent ? 0.30 : 0.22;
+    const vol = this.isInMenu ? baseVol * 0.75 : baseVol;
     gain.gain.setValueAtTime(vol, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.13);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
 
     osc.connect(filter);
     filter.connect(gain);
     gain.connect(this.bgmGain);
 
     osc.start(time);
-    osc.stop(time + 0.14);
+    osc.stop(time + 0.16);
   }
 
   private playNeonLead(time: number, freq: number, accent: boolean) {
@@ -418,19 +487,20 @@ class SoundEngine {
     const filter = this.ctx.createBiquadFilter();
     const gain = this.ctx.createGain();
 
-    // Dual detuned square/sawtooth for lush neon synth feel
-    osc1.type = 'sawtooth';
+    // Dual detuned warm square/triangle for vibey synth lead
+    osc1.type = 'triangle';
     osc2.type = 'square';
     osc1.frequency.setValueAtTime(freq, time);
-    osc2.frequency.setValueAtTime(freq * 1.006, time); // Subtle cyber chorusing detune
+    osc2.frequency.setValueAtTime(freq * 1.004, time); // Subtle lush detune
 
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(3200, time);
-    filter.frequency.exponentialRampToValueAtTime(800, time + 0.18);
+    filter.frequency.setValueAtTime(this.isInMenu ? 1700 : 3400, time);
+    filter.frequency.exponentialRampToValueAtTime(this.isInMenu ? 460 : 700, time + 0.22);
 
-    const vol = accent ? 0.16 : 0.11;
+    const baseVol = accent ? 0.15 : 0.11;
+    const vol = this.isInMenu ? baseVol * 0.7 : baseVol;
     gain.gain.setValueAtTime(vol, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.24);
 
     osc1.connect(filter);
     osc2.connect(filter);
@@ -439,8 +509,8 @@ class SoundEngine {
 
     osc1.start(time);
     osc2.start(time);
-    osc1.stop(time + 0.22);
-    osc2.stop(time + 0.22);
+    osc1.stop(time + 0.25);
+    osc2.stop(time + 0.25);
   }
 
   // ----------------------------------------------------

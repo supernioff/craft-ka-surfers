@@ -256,14 +256,17 @@ export const GameHUD: React.FC<GameHUDProps> = ({
             <button
               id="hud-music-button"
               onClick={toggleBgmHandler}
-              className={`p-2 sm:p-2.5 rounded-xl backdrop-blur-md border transition-all cursor-pointer ${
+              className={`p-2 sm:p-2.5 rounded-xl backdrop-blur-md border transition-all cursor-pointer flex items-center gap-1.5 ${
                 isBgmMuted
                   ? 'bg-slate-900/70 border-slate-700/50 text-slate-500 hover:text-slate-300'
-                  : 'bg-amber-600/30 border-amber-500/50 text-amber-300 shadow'
+                  : 'bg-amber-600/35 border-amber-500/60 text-amber-300 shadow ring-1 ring-amber-400/40'
               }`}
-              title={isBgmMuted ? 'Unmute Music' : 'Mute Music'}
+              title={isBgmMuted ? 'Unmute Vibe Music' : 'Mute Vibe Music'}
             >
-              <Music className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <Music className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${!isBgmMuted ? 'animate-pulse text-amber-300' : 'text-slate-400'}`} />
+              <span className="text-[10px] font-mono hidden min-[480px]:inline">
+                {isBgmMuted ? 'BGM OFF' : 'BGM ON'}
+              </span>
             </button>
 
             {/* Sound FX Toggle (Only mutes SFX, does not touch Music) */}

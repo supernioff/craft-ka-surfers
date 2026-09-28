@@ -465,7 +465,10 @@ export function buildGhostDog(): GhostDogLimbs {
  * bright RED WARNING LANTERNS, and loaded with explosive RED TNT BLOCKS with white fuses!
  * Immediately distinguishable from miles away as a lethal threat!
  */
+let minecartTemplate: THREE.Group | null = null;
 export function buildMinecart(): THREE.Group {
+  if (minecartTemplate) return minecartTemplate.clone(true);
+
   const group = new THREE.Group();
 
   const ironMat = createBlockMaterial(0x334155); // Dark steel / cast iron
@@ -557,7 +560,8 @@ export function buildMinecart(): THREE.Group {
   hl2.position.set(0.45, 0.85, 1.02);
   group.add(hl2);
 
-  return group;
+  minecartTemplate = group;
+  return group.clone(true);
 }
 
 /**
@@ -565,7 +569,10 @@ export function buildMinecart(): THREE.Group {
  * Rugged wooden roadblock with pointed warning spikes and bright CAUTION REFLECTOR.
  * Clear, ground-bound hazard that signals: "JUMP OVER ME!"
  */
+let rockObstacleTemplate: THREE.Group | null = null;
 export function buildRockObstacle(): THREE.Group {
+  if (rockObstacleTemplate) return rockObstacleTemplate.clone(true);
+
   const group = new THREE.Group();
 
   const woodMat = createBlockMaterial(0x5c3d24); // Dark Oak
@@ -610,7 +617,8 @@ export function buildRockObstacle(): THREE.Group {
     group.add(spike);
   }
 
-  return group;
+  rockObstacleTemplate = group;
+  return group.clone(true);
 }
 
 /**
@@ -620,7 +628,10 @@ export function buildRockObstacle(): THREE.Group {
  * and hanging "SLIDE ⬇" caution indicator.
  * Ground level has 1.15m clearance so ducking/sliding cleanly passes under!
  */
+let ghostObstacleTemplate: THREE.Group | null = null;
 export function buildGhostObstacle(): THREE.Group {
+  if (ghostObstacleTemplate) return ghostObstacleTemplate.clone(true);
+
   const group = new THREE.Group();
 
   const steelMat = createBlockMaterial(0xd1d5db); // Galvanized steel
@@ -685,7 +696,8 @@ export function buildGhostObstacle(): THREE.Group {
   arrowHead.position.set(0, 1.42, 0.2);
   group.add(arrowHead);
 
-  return group;
+  ghostObstacleTemplate = group;
+  return group.clone(true);
 }
 
 /**
@@ -694,7 +706,10 @@ export function buildGhostObstacle(): THREE.Group {
  * Rotates smoothly in mid-air at 0.8m height.
  * Radically distinct from the heavy dark obstacles!
  */
+let diamondTemplate: THREE.Group | null = null;
 export function buildDiamond(): THREE.Group {
+  if (diamondTemplate) return diamondTemplate.clone(true);
+
   const group = new THREE.Group();
 
   const diamondBlueMat = createBlockMaterial(0x38bdf8, 0x0284c7, 1.0, 1.2);
@@ -721,13 +736,17 @@ export function buildDiamond(): THREE.Group {
   core.rotation.set(Math.PI / 4, Math.PI / 4, 0);
   group.add(core);
 
-  return group;
+  diamondTemplate = group;
+  return group.clone(true);
 }
 
 /**
  * Builds Golden Coin / Gold Ingot Collectible
  */
+let goldNuggetTemplate: THREE.Group | null = null;
 export function buildGoldNugget(): THREE.Group {
+  if (goldNuggetTemplate) return goldNuggetTemplate.clone(true);
+
   const group = new THREE.Group();
   const goldMat = createBlockMaterial(0xfbbf24, 0xd97706, 1.0, 1.4);
   const edgeMat = createBlockMaterial(0xfef08a, 0xf59e0b, 1.0, 1.6);
@@ -742,14 +761,18 @@ export function buildGoldNugget(): THREE.Group {
   star.rotation.z = Math.PI / 4;
   group.add(star);
 
-  return group;
+  goldNuggetTemplate = group;
+  return group.clone(true);
 }
 
 /**
  * Builds Enchanted Golden Apple Power-Up (Invincibility + Multiplier)
  * Gleaming 24K gold sphere with emerald leaf and shining golden halo ring.
  */
+let goldenAppleTemplate: THREE.Group | null = null;
 export function buildGoldenApple(): THREE.Group {
+  if (goldenAppleTemplate) return goldenAppleTemplate.clone(true);
+
   const group = new THREE.Group();
 
   const goldMat = createBlockMaterial(0xfbbf24, 0xf59e0b, 1.0, 1.5);
@@ -782,7 +805,8 @@ export function buildGoldenApple(): THREE.Group {
   halo.rotation.x = Math.PI / 3;
   group.add(halo);
 
-  return group;
+  goldenAppleTemplate = group;
+  return group.clone(true);
 }
 
 /**
@@ -790,7 +814,10 @@ export function buildGoldenApple(): THREE.Group {
  * Classic bright red horseshoe body with shiny chrome tips.
  * Crystal clear visual identity!
  */
+let redstoneCompassTemplate: THREE.Group | null = null;
 export function buildRedstoneCompass(): THREE.Group {
+  if (redstoneCompassTemplate) return redstoneCompassTemplate.clone(true);
+
   const group = new THREE.Group();
 
   const redMat = createBlockMaterial(0xdc2626, 0x991b1b, 1.0, 1.4);
@@ -830,7 +857,8 @@ export function buildRedstoneCompass(): THREE.Group {
   spark.position.set(0, -0.18, 0);
   group.add(spark);
 
-  return group;
+  redstoneCompassTemplate = group;
+  return group.clone(true);
 }
 
 export function buildMagnet(): THREE.Group {
@@ -841,7 +869,10 @@ export function buildMagnet(): THREE.Group {
  * Builds Potion of Swiftness (Speed Boost)
  * Sparkling glass flask with bright bubbly amber/electric blue potion inside.
  */
+let potionTemplate: THREE.Group | null = null;
 export function buildPotionOfSwiftness(): THREE.Group {
+  if (potionTemplate) return potionTemplate.clone(true);
+
   const group = new THREE.Group();
 
   const liquidMat = createBlockMaterial(0x0284c7, 0x38bdf8, 0.95, 1.6);
@@ -870,7 +901,8 @@ export function buildPotionOfSwiftness(): THREE.Group {
   cork.position.y = 0.5;
   group.add(cork);
 
-  return group;
+  potionTemplate = group;
+  return group.clone(true);
 }
 
 /**
