@@ -65,53 +65,75 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         {isNewHighScore ? (
           <div
             id="new-high-score-banner"
-            className="mb-4 px-4 py-2 bg-amber-500/20 border-2 border-amber-400 rounded-lg flex items-center justify-center gap-2 animate-bounce shadow-lg"
+            className="mb-4 px-3 sm:px-4 py-2 bg-amber-500/20 border-2 border-amber-400 rounded-lg flex items-center justify-center gap-2 animate-bounce shadow-lg max-w-full"
           >
-            <Trophy className="w-5 h-5 text-amber-400" />
-            <span className="font-minecraft text-xs text-amber-300">
+            <Trophy className="w-5 h-5 text-amber-400 shrink-0" />
+            <span className="font-minecraft text-[11px] sm:text-xs text-amber-300 leading-snug">
               NEW HIGH SCORE POSTED TO LEADERBOARD! 🏆
             </span>
           </div>
         ) : (
-          <div className="mb-4 px-3 py-1.5 bg-black/40 border border-yellow-500/30 rounded flex items-center justify-center gap-2 text-xs font-minecraft text-yellow-300">
-            <Trophy className="w-4 h-4 text-yellow-400" />
-            <span>Best High Score: {Math.max(playerState.score, personalBest).toLocaleString()} pts</span>
+          <div className="mb-4 px-3 py-1.5 bg-black/40 border border-yellow-500/30 rounded flex items-center justify-center gap-2 text-xs font-minecraft text-yellow-300 max-w-full overflow-hidden">
+            <Trophy className="w-4 h-4 text-yellow-400 shrink-0" />
+            <span className="truncate">
+              Best High Score: {Math.max(playerState.score, personalBest).toLocaleString()} pts
+            </span>
           </div>
         )}
 
-        {/* Run Stats Container */}
+        {/* Run Stats Container - Protected from overflow on all devices & screens */}
         <div
           id="game-over-stats-card"
-          className="w-full bg-[#1b1e24]/90 border-2 border-[#474e5d] rounded-xl p-4 mb-5 text-center shadow-2xl"
+          className="w-full bg-[#1b1e24]/90 border-2 border-[#474e5d] rounded-xl p-3 sm:p-4 mb-5 text-center shadow-2xl overflow-hidden"
         >
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            <div className="flex flex-col items-center justify-center p-2.5 bg-black/40 rounded-lg border border-white/5">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
+            {/* Score */}
+            <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 bg-black/40 rounded-lg border border-white/5 min-w-0 overflow-hidden">
               <span className="text-gray-400 text-[10px] block mb-0.5 font-mono uppercase font-semibold">Score</span>
-              <span id="final-score-value" className="font-minecraft text-base sm:text-xl text-yellow-400">
+              <span
+                id="final-score-value"
+                className={`font-minecraft text-yellow-400 truncate max-w-full tracking-tight ${
+                  playerState.score > 999999 ? 'text-xs sm:text-sm' : playerState.score > 99999 ? 'text-sm sm:text-base' : 'text-base sm:text-lg'
+                }`}
+                title={playerState.score.toLocaleString()}
+              >
                 {playerState.score.toLocaleString()}
               </span>
             </div>
 
-            <div className="flex flex-col items-center justify-center p-2.5 bg-black/40 rounded-lg border border-emerald-500/20">
+            {/* Distance */}
+            <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 bg-black/40 rounded-lg border border-emerald-500/20 min-w-0 overflow-hidden">
               <span className="text-emerald-400 text-[10px] block mb-0.5 font-mono uppercase font-semibold">Distance</span>
-              <span className="font-minecraft text-base sm:text-xl text-emerald-400">
-                {Math.floor(playerState.distance)}m
+              <span
+                className="font-minecraft text-sm sm:text-base md:text-lg text-emerald-400 truncate max-w-full"
+                title={`${Math.floor(playerState.distance).toLocaleString()}m`}
+              >
+                {Math.floor(playerState.distance).toLocaleString()}m
               </span>
             </div>
 
-            <div className="flex flex-col items-center justify-center p-2.5 bg-black/40 rounded-lg border border-cyan-500/20">
+            {/* Diamonds */}
+            <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 bg-black/40 rounded-lg border border-cyan-500/20 min-w-0 overflow-hidden">
               <span className="text-cyan-300 text-[10px] block mb-0.5 font-mono uppercase font-semibold">Diamonds</span>
-              <span id="final-coins-value" className="font-minecraft text-base sm:text-xl text-cyan-300 flex items-center justify-center gap-1">
-                <span>💎</span>
-                <span>{playerState.coins}</span>
+              <span
+                id="final-coins-value"
+                className="font-minecraft text-sm sm:text-base md:text-lg text-cyan-300 flex items-center justify-center gap-1 truncate max-w-full"
+                title={`${playerState.coins.toLocaleString()} Diamonds`}
+              >
+                <span className="shrink-0 text-xs sm:text-sm">💎</span>
+                <span className="truncate">{playerState.coins.toLocaleString()}</span>
               </span>
             </div>
 
-            <div className="flex flex-col items-center justify-center p-2.5 bg-black/40 rounded-lg border border-orange-500/20">
+            {/* Near Miss */}
+            <div className="flex flex-col items-center justify-center p-2 sm:p-2.5 bg-black/40 rounded-lg border border-orange-500/20 min-w-0 overflow-hidden">
               <span className="text-orange-400 text-[10px] block mb-0.5 font-mono uppercase font-semibold">Near Miss</span>
-              <span className="font-minecraft text-base sm:text-xl text-orange-400 flex items-center justify-center gap-1">
-                <span>⚡</span>
-                <span>{playerState.nearMissCount || 0}</span>
+              <span
+                className="font-minecraft text-sm sm:text-base md:text-lg text-orange-400 flex items-center justify-center gap-1 truncate max-w-full"
+                title={`${playerState.nearMissCount || 0} Near Misses`}
+              >
+                <span className="shrink-0 text-xs sm:text-sm">⚡</span>
+                <span className="truncate">{playerState.nearMissCount || 0}</span>
               </span>
             </div>
           </div>

@@ -174,7 +174,7 @@ export default function App() {
     }
   };
 
-  // Sync High Score to Firestore Leaderboard
+  // Sync High Score & Diamonds to Firestore Leaderboard
   const syncHighScoreToLeaderboard = useCallback(async (
     scoreToSync: number,
     distanceRun: number = 0,
@@ -185,27 +185,42 @@ export default function App() {
     const activeId = targetId || uniqueMinerId || (currentUser ? currentUser.uid : `Miner_${Date.now().toString().slice(-4)}`);
     const activeName = targetName || minerDisplayName || uniqueMinerId || currentUser?.displayName || 'Steve';
 
-    if (scoreToSync <= 0 || !activeId) return;
+    if (!activeId) return;
 
     try {
       const scoreDocRef = doc(db, 'highScores', activeId);
       const existingSnap = await getDoc(scoreDocRef);
+      const savedCoins = parseInt(localStorage.getItem('craft_lifetime_coins') || '0', 10);
+      const currentLifetimeCoins = Math.max(diamondsEarned, savedCoins, guestProfile.lifetimeCoins || 0);
 
-      if (!existingSnap.exists() || (existingSnap.data()?.score || 0) <= scoreToSync) {
-        const payload: HighScoreRecord = {
-          userId: activeId,
-          displayName: activeName,
-          score: scoreToSync,
-          distance: Math.max(distanceRun, existingSnap.data()?.distance || 0),
-          coins: Math.max(diamondsEarned, existingSnap.data()?.coins || 0),
-          createdAt: new Date().toISOString(),
-        };
-        await setDoc(scoreDocRef, payload, { merge: true });
+      const existingData = existingSnap.exists() ? existingSnap.data() : null;
+      const prevScore = existingData?.score || 0;
+      const prevCoins = Math.max(
+        Number(existingData?.coins) || 0,
+        Number(existingData?.diamonds) || 0,
+        Number(existingData?.lifetimeCoins) || 0
+      );
+
+      const finalCoins = Math.max(currentLifetimeCoins, prevCoins);
+      const finalScore = Math.max(scoreToSync, prevScore);
+
+      if (finalScore > 0 || finalCoins > 0) {
+        if (!existingSnap.exists() || prevScore <= scoreToSync || finalCoins > prevCoins) {
+          const payload: HighScoreRecord = {
+            userId: activeId,
+            displayName: activeName,
+            score: finalScore,
+            distance: Math.max(distanceRun, existingData?.distance || 0),
+            coins: finalCoins,
+            createdAt: new Date().toISOString(),
+          };
+          await setDoc(scoreDocRef, payload, { merge: true });
+        }
       }
     } catch (err) {
       console.warn('Could not sync high score to leaderboard:', err);
     }
-  }, [uniqueMinerId, minerDisplayName, currentUser]);
+  }, [uniqueMinerId, minerDisplayName, currentUser, guestProfile.lifetimeCoins]);
 
   const handleLoginConfirm = (id: string, name: string) => {
     setUniqueMinerId(id);
@@ -214,18 +229,22 @@ export default function App() {
     localStorage.setItem('mc_miner_name', name);
     setIsLoginModalOpen(false);
 
-    // Sync high score to leaderboard immediately for this unique ID
-    if (personalBest > 0) {
-      syncHighScoreToLeaderboard(personalBest, 0, 0, id, name);
+    // Sync high score & diamonds to leaderboard immediately for this unique ID
+    const savedCoins = parseInt(localStorage.getItem('craft_lifetime_coins') || '0', 10);
+    const activeCoins = Math.max(savedCoins, guestProfile.lifetimeCoins || 0);
+    if (personalBest > 0 || activeCoins > 0) {
+      syncHighScoreToLeaderboard(personalBest, 0, activeCoins, id, name);
     }
   };
 
-  // Sync high score on initial boot if personalBest exists
+  // Sync high score & diamonds on initial boot if personalBest or diamonds exist
   useEffect(() => {
-    if (personalBest > 0 && uniqueMinerId) {
-      syncHighScoreToLeaderboard(personalBest, 0, 0, uniqueMinerId, minerDisplayName);
+    const savedCoins = parseInt(localStorage.getItem('craft_lifetime_coins') || '0', 10);
+    const activeCoins = Math.max(savedCoins, guestProfile.lifetimeCoins || 0);
+    if ((personalBest > 0 || activeCoins > 0) && uniqueMinerId) {
+      syncHighScoreToLeaderboard(personalBest, 0, activeCoins, uniqueMinerId, minerDisplayName);
     }
-  }, [uniqueMinerId, minerDisplayName, personalBest, syncHighScoreToLeaderboard]);
+  }, [uniqueMinerId, minerDisplayName, personalBest, guestProfile.lifetimeCoins, syncHighScoreToLeaderboard]);
 
   // Keep refs for game state to avoid stale closures in engine callbacks
   const gameStateRef = useRef(gameState);
@@ -312,12 +331,13 @@ export default function App() {
       return updated;
     });
 
-    // Always put High Score to Global Leaderboard
-    if (bestScore > 0) {
+    // Always put High Score & Accumulated Diamonds to Global Leaderboard
+    const accumulatedDiamonds = (guestProfile.lifetimeCoins || 0) + finalState.coins;
+    if (bestScore > 0 || accumulatedDiamonds > 0) {
       await syncHighScoreToLeaderboard(
         bestScore,
         Math.floor(finalState.distance),
-        finalState.coins
+        accumulatedDiamonds
       );
     }
 
@@ -389,7 +409,7 @@ export default function App() {
     setIsWelcomeModalOpen(false);
   }, [handleSelectSkin]);
 
-  // Initialize 3D Engine on mount
+  // Initialize 3D Engine on mount once
   useEffect(() => {
     if (canvasRef.current && !engineRef.current) {
       const engine = new Engine3D(canvasRef.current, 1337);
@@ -421,7 +441,21 @@ export default function App() {
       engineRef.current?.destroy();
       engineRef.current = null;
     };
-  }, [selectedSkin, selectedTheme]);
+  }, []); // Run only once on mount: never destroy engine mid-run!
+
+  // Dynamically update skin without re-instantiating the engine
+  useEffect(() => {
+    if (engineRef.current && selectedSkin) {
+      engineRef.current.setSkin(selectedSkin);
+    }
+  }, [selectedSkin]);
+
+  // Dynamically update theme without re-instantiating or freezing the engine
+  useEffect(() => {
+    if (engineRef.current && selectedTheme) {
+      engineRef.current.setTheme(selectedTheme);
+    }
+  }, [selectedTheme]);
 
   // Handle Multiplayer Progress Sync
   useEffect(() => {
@@ -921,6 +955,7 @@ export default function App() {
         currentUserId={uniqueMinerId || currentUser?.uid}
         personalBest={personalBest}
         displayName={minerDisplayName || uniqueMinerId || currentUser?.displayName || 'Steve'}
+        diamonds={Math.max(guestProfile.lifetimeCoins || 0, parseInt(localStorage.getItem('craft_lifetime_coins') || '0', 10))}
       />
 
       {/* MULTIPLAYER RACE LOBBY MODAL */}

@@ -6,7 +6,7 @@ export const LANE_COORDS: Record<Lane, number> = {
   [1]: 2.6,
 };
 
-export type ObstacleType = 'minecart' | 'rock' | 'ghost' | 'barrier_high';
+export type ObstacleType = 'minecart' | 'rock' | 'ghost' | 'barrier_high' | 'phantom';
 export type ItemType = 'diamond' | 'coin' | 'golden_apple' | 'magnet' | 'potion';
 export type RunnerSkin = 'steve' | 'diamond' | 'nether' | 'gold';
 export type GameTheme = 'day_walk' | 'night_walk' | 'closed_cave' | 'water_walk';
@@ -67,6 +67,7 @@ export interface PlayerState {
   z: number;
   isJumping: boolean;
   isSliding: boolean;
+  isDiving?: boolean;
   jumpVelocity: number;
   distance: number;
   score: number;

@@ -10,6 +10,7 @@ import {
   buildMinecart,
   buildRockObstacle,
   buildGhostObstacle,
+  buildAerialPhantom,
   buildDiamond,
   buildGoldNugget,
   buildGoldenApple,
@@ -142,6 +143,7 @@ export class Engine3D {
       z: 0,
       isJumping: false,
       isSliding: false,
+      isDiving: false,
       jumpVelocity: 0,
       distance: 0,
       score: 0,
@@ -590,9 +592,21 @@ export class Engine3D {
 
     this.createCaveParticles();
 
-    // Rebuild track tiles keeping relative player z alignment
+    // Rebuild track tiles keeping relative player z alignment smoothly
     const currentZPositions = this.trackTiles.map((t) => t.position.z);
-    this.trackTiles.forEach((t) => this.trackGroup.remove(t));
+    this.trackTiles.forEach((t) => {
+      this.trackGroup.remove(t);
+      t.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.geometry?.dispose();
+          if (Array.isArray(child.material)) {
+            child.material.forEach((m) => m.dispose());
+          } else if (child.material) {
+            child.material.dispose();
+          }
+        }
+      });
+    });
     this.trackTiles = [];
 
     for (let i = 0; i < this.numTiles; i++) {
@@ -797,7 +811,7 @@ export class Engine3D {
       let speed = 0;
 
       let mesh: THREE.Group;
-      if (typeRoll < 0.42) {
+      if (typeRoll < 0.32) {
         // Minecart Trolley (speeding oncoming trolley rushing down the track towards player!)
         type = 'minecart';
         mesh = buildMinecart();
@@ -805,14 +819,14 @@ export class Engine3D {
         width = 1.5;
         depth = 2.0;
         speed = this.prng() > 0.35 ? (12 + this.prng() * 6) : 0; // Speeding oncoming trolley!
-      } else if (typeRoll < 0.72) {
+      } else if (typeRoll < 0.58) {
         // Rock obstacle to jump over
         type = 'rock';
         mesh = buildRockObstacle();
         height = 1.1;
         width = 1.6;
         depth = 1.4;
-      } else {
+      } else if (typeRoll < 0.78) {
         // Spooky ghost hurdle obstacle (floating barrier: slide underneath or switch lanes!)
         type = 'ghost';
         mesh = buildGhostObstacle();
@@ -820,6 +834,14 @@ export class Engine3D {
         width = 1.6;
         depth = 1.4;
         y = 0; // Ground level pivot with floating torso at Y=1.55
+      } else {
+        // Airborne Phantom (Air obstacle hovering in the sky/air: slide/dive underneath or switch lanes!)
+        type = 'phantom';
+        mesh = buildAerialPhantom();
+        height = 1.6;
+        width = 2.2;
+        depth = 1.8;
+        y = 1.85; // Flying high in the air!
       }
 
       mesh.position.set(LANE_COORDS[lane], y, z);
@@ -956,26 +978,73 @@ export class Engine3D {
       return;
     }
     if (this.playerState.isDead) return;
-    if (!this.playerState.isSliding) {
-      this.playerState.isSliding = true;
-      sound.playSlide();
 
-      // If jumping, quick descent / cancel jump into slide
-      if (this.playerState.isJumping) {
-        this.playerState.jumpVelocity = -25;
+    // Check if player is airborne (jumping or in the air)
+    if (this.playerState.isJumping || this.playerState.y > 0.15) {
+      // In mid-air! Initiate high-velocity dive / ground plunge down
+      if (!this.playerState.isDiving) {
+        this.playerState.isDiving = true;
+        this.playerState.jumpVelocity = -36; // Strong downward momentum
+        sound.playDive();
       }
-
-      // If chaser is nearby at start, slight pressure
-      if (this.playerState.chaserDistance < 6) {
-        this.playerState.chaserDistance = Math.max(1.8, this.playerState.chaserDistance - 0.4);
-      }
-
-      setTimeout(() => {
-        if (!this.isDestroyed) {
-          this.playerState.isSliding = false;
-        }
-      }, 700);
+      return;
     }
+
+    // On the ground: initiate slide
+    if (!this.playerState.isSliding) {
+      this.triggerGroundSlide();
+    }
+  }
+
+  private triggerGroundSlide() {
+    if (this.playerState.isSliding || this.playerState.isDead) return;
+    this.playerState.isSliding = true;
+    sound.playSlide();
+
+    // If chaser is nearby at start, slight pressure
+    if (this.playerState.chaserDistance < 6) {
+      this.playerState.chaserDistance = Math.max(1.8, this.playerState.chaserDistance - 0.4);
+    }
+
+    setTimeout(() => {
+      if (!this.isDestroyed) {
+        this.playerState.isSliding = false;
+      }
+    }, 720);
+  }
+
+  private spawnLandingDust(x: number, z: number) {
+    if (!this.scene) return;
+    const dustCount = 8;
+    const dustMat = createBlockMaterial(0xd1d5db, 0x9ca3af, 0.75, 0.5);
+    const dustGroup = new THREE.Group();
+    dustGroup.position.set(x, 0.08, z);
+
+    for (let i = 0; i < dustCount; i++) {
+      const angle = (i / dustCount) * Math.PI * 2;
+      const size = 0.12 + Math.random() * 0.1;
+      const geo = new THREE.BoxGeometry(size, size, size);
+      const mesh = new THREE.Mesh(geo, dustMat);
+      mesh.position.set(Math.cos(angle) * 0.4, 0.06, Math.sin(angle) * 0.4);
+      dustGroup.add(mesh);
+    }
+    this.scene.add(dustGroup);
+
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += 0.05;
+      dustGroup.scale.multiplyScalar(1.15);
+      dustGroup.position.y += 0.02;
+      if (elapsed >= 0.3) {
+        clearInterval(interval);
+        this.scene.remove(dustGroup);
+        dustGroup.traverse((c) => {
+          if (c instanceof THREE.Mesh) {
+            c.geometry?.dispose();
+          }
+        });
+      }
+    }, 50);
   }
 
   public updateOpponent(targetDistance: number, targetLane: number, isDead: boolean) {
@@ -1135,27 +1204,50 @@ export class Engine3D {
     this.playerState.x = this.playerGroup.position.x;
     this.playerGroup.position.z = this.playerState.z;
 
-    // Jump / Gravity Physics
+    // Jump / Gravity / Dive Physics
     if (this.playerState.isJumping) {
+      const gravity = this.playerState.isDiving ? 70 : 42;
       this.playerState.y += this.playerState.jumpVelocity * delta;
-      this.playerState.jumpVelocity -= 42 * delta; // Gravity
+      this.playerState.jumpVelocity -= gravity * delta;
 
       if (this.playerState.y <= 0) {
         this.playerState.y = 0;
         this.playerState.isJumping = false;
         this.playerState.jumpVelocity = 0;
+        const wasDiving = this.playerState.isDiving;
+        this.playerState.isDiving = false;
+
+        // If player was diving from mid-air, trigger landing dust and chain into slide!
+        if (wasDiving) {
+          this.triggerGroundSlide();
+          this.spawnLandingDust(this.playerGroup.position.x, this.playerGroup.position.z);
+        }
       }
     }
-    this.playerGroup.position.y = this.playerState.y;
+
+    if (this.playerState.isSliding && !this.playerState.isJumping) {
+      this.playerGroup.position.y = 0.38;
+    } else {
+      this.playerGroup.position.y = this.playerState.y;
+    }
 
     // Steve Running Limbs Animation
     this.runAnimTime += delta * (this.speed * 0.75);
     const swingAngle = Math.sin(this.runAnimTime) * 0.8;
 
-    if (this.playerState.isSliding) {
-      // Duck / Slide posture: tilt body horizontal, lower height
+    if (this.playerState.isDiving) {
+      // MID-AIR FAST DIVE POSTURE:
+      // Body tilts forward-down in aerodynamic dive, arms swept back, legs trailing
+      this.playerGroup.rotation.x = Math.PI / 4.2;
+      this.playerLimbs.head.rotation.x = -Math.PI / 6;
+      this.playerLimbs.leftArm.rotation.x = Math.PI / 1.35;
+      this.playerLimbs.rightArm.rotation.x = Math.PI / 1.35;
+      this.playerLimbs.leftLeg.rotation.x = -0.4;
+      this.playerLimbs.rightLeg.rotation.x = -0.4;
+    } else if (this.playerState.isSliding) {
+      // Ground slide posture: tilt body horizontal, lower height
       this.playerGroup.rotation.x = -Math.PI / 3;
-      this.playerGroup.position.y = 0.4;
+      this.playerLimbs.head.rotation.x = Math.PI / 6;
       this.playerLimbs.leftArm.rotation.x = -Math.PI / 4;
       this.playerLimbs.rightArm.rotation.x = -Math.PI / 4;
       this.playerLimbs.leftLeg.rotation.x = 0;
@@ -1163,6 +1255,7 @@ export class Engine3D {
     } else if (this.playerState.isJumping) {
       // Jump posture: arms up, legs slightly bent
       this.playerGroup.rotation.x = 0;
+      this.playerLimbs.head.rotation.x = 0;
       this.playerLimbs.leftArm.rotation.x = -Math.PI / 1.5;
       this.playerLimbs.rightArm.rotation.x = -Math.PI / 1.5;
       this.playerLimbs.leftLeg.rotation.x = 0.5;
@@ -1170,6 +1263,7 @@ export class Engine3D {
     } else {
       // Standard running gait
       this.playerGroup.rotation.x = 0;
+      this.playerLimbs.head.rotation.x = 0;
       this.playerLimbs.leftArm.rotation.x = swingAngle;
       this.playerLimbs.rightArm.rotation.x = -swingAngle;
       this.playerLimbs.leftLeg.rotation.x = -swingAngle;
@@ -1359,13 +1453,29 @@ export class Engine3D {
         }
       }
 
+      // Airborne Phantom wing flap & hovering animation
+      if (obs.type === 'phantom' && obs.mesh) {
+        obs.mesh.position.y = obs.y + Math.sin(this.runAnimTime * 3.5 + obs.id) * 0.18;
+        if (obs.mesh.userData?.leftWing && obs.mesh.userData?.rightWing) {
+          const flap = Math.sin(this.runAnimTime * 6.0 + obs.id) * 0.32;
+          obs.mesh.userData.leftWing.rotation.z = flap;
+          obs.mesh.userData.rightWing.rotation.z = -flap;
+        }
+      }
+
       // Check collision if obstacle is near player
       if (Math.abs(obs.z - pz) < 4.0 && obs.mesh) {
         const ox = obs.mesh.position.x;
         const oy = obs.mesh.position.y;
         const oz = obs.mesh.position.z;
 
-        if (obs.type === 'ghost') {
+        if (obs.type === 'phantom') {
+          // Aerial Phantom: flies in the air (Y = 1.15 to 2.8m).
+          // Sliding keeps player low (Y=0 to 0.7m), allowing clean sliding underneath!
+          // But standing (Y=0 to 1.8m) or jumping into it is FATAL!
+          this.obsBox.min.set(ox - obs.width / 2, oy - 0.45, oz - obs.depth / 2);
+          this.obsBox.max.set(ox + obs.width / 2, oy + obs.height, oz + obs.depth / 2);
+        } else if (obs.type === 'ghost') {
           // Floating Ghost Hurdle:
           // Clearance underneath from Y=0 to 0.85m allows sliding cleanly underneath!
           // BUT standing (Y=0 to 1.8) or jumping (Y=0.5 to 2.4) into it is FATAL!
@@ -1493,6 +1603,8 @@ export class Engine3D {
       cause = 'Player pulverized into solid rock';
     } else if (obstacleType === 'ghost') {
       cause = 'Player was haunted & slain by the Cave Ghost';
+    } else if (obstacleType === 'phantom') {
+      cause = 'Player was struck down by an Airborne Phantom';
     } else {
       cause = 'Player was apprehended by the Ghost Policeman';
     }
@@ -1597,6 +1709,7 @@ export class Engine3D {
       z: 0,
       isJumping: false,
       isSliding: false,
+      isDiving: false,
       jumpVelocity: 0,
       distance: 0,
       score: 0,

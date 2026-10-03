@@ -701,6 +701,113 @@ export function buildGhostObstacle(): THREE.Group {
 }
 
 /**
+ * Builds Minecraft Airborne Phantom (Air Obstacle)
+ * Hovering mid-air predator with spread wings, segmented spine tail,
+ * and piercing glowing green lime eyes.
+ * Flying at mid-air height: players must slide/dive underneath or switch lanes!
+ */
+export function buildAerialPhantom(): THREE.Group {
+  const group = new THREE.Group();
+
+  const slateMat = createBlockMaterial(0x1e293b); // Dark navy indigo body
+  const underMat = createBlockMaterial(0x334155); // Secondary membrane
+  const eyeMat = createBlockMaterial(0x4ade80, 0x22c55e, 1.0, 2.8); // Glowing green eyes
+  const talonMat = createBlockMaterial(0x94a3b8); // Sharp talons
+  const spineMat = createBlockMaterial(0x475569); // Tail bones
+
+  // 1. Central Torso Body
+  const bodyGeo = new THREE.BoxGeometry(0.65, 0.35, 1.3);
+  const body = new THREE.Mesh(bodyGeo, slateMat);
+  body.castShadow = true;
+  group.add(body);
+
+  // Underbelly plate
+  const underGeo = new THREE.BoxGeometry(0.55, 0.08, 1.1);
+  const under = new THREE.Mesh(underGeo, underMat);
+  under.position.set(0, -0.16, 0);
+  group.add(under);
+
+  // 2. Head
+  const headGeo = new THREE.BoxGeometry(0.5, 0.3, 0.45);
+  const head = new THREE.Mesh(headGeo, slateMat);
+  head.position.set(0, 0.04, 0.8);
+  head.castShadow = true;
+  group.add(head);
+
+  // Piercing Lime Eyes (Left & Right)
+  const eyeGeo = new THREE.BoxGeometry(0.12, 0.08, 0.04);
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.16, 0.06, 1.03);
+  group.add(leftEye);
+
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.16, 0.06, 1.03);
+  group.add(rightEye);
+
+  // 3. Segmented Tail & Spines
+  const tail1Geo = new THREE.BoxGeometry(0.35, 0.22, 0.5);
+  const tail1 = new THREE.Mesh(tail1Geo, slateMat);
+  tail1.position.set(0, 0.04, -0.85);
+  group.add(tail1);
+
+  const tail2Geo = new THREE.BoxGeometry(0.22, 0.16, 0.55);
+  const tail2 = new THREE.Mesh(tail2Geo, spineMat);
+  tail2.position.set(0, 0.02, -1.3);
+  group.add(tail2);
+
+  // 4. Wings (Wide wingspan with flapping pivots)
+  const leftWingGroup = new THREE.Group();
+  leftWingGroup.position.set(-0.32, 0.05, 0.1);
+
+  const innerWingGeo = new THREE.BoxGeometry(0.75, 0.06, 0.85);
+  const innerWingL = new THREE.Mesh(innerWingGeo, slateMat);
+  innerWingL.position.set(-0.38, 0, 0);
+  innerWingL.castShadow = true;
+  leftWingGroup.add(innerWingL);
+
+  const outerWingGeo = new THREE.BoxGeometry(0.65, 0.05, 0.65);
+  const outerWingL = new THREE.Mesh(outerWingGeo, underMat);
+  outerWingL.position.set(-0.95, -0.04, -0.05);
+  outerWingL.castShadow = true;
+  leftWingGroup.add(outerWingL);
+
+  group.add(leftWingGroup);
+
+  const rightWingGroup = new THREE.Group();
+  rightWingGroup.position.set(0.32, 0.05, 0.1);
+
+  const innerWingR = new THREE.Mesh(innerWingGeo, slateMat);
+  innerWingR.position.set(0.38, 0, 0);
+  innerWingR.castShadow = true;
+  rightWingGroup.add(innerWingR);
+
+  const outerWingR = new THREE.Mesh(outerWingGeo, underMat);
+  outerWingR.position.set(0.95, -0.04, -0.05);
+  outerWingR.castShadow = true;
+  rightWingGroup.add(outerWingR);
+
+  group.add(rightWingGroup);
+
+  // 5. Claws / Talons (Hanging ready to strike mid-air runners)
+  const talonGeo = new THREE.BoxGeometry(0.08, 0.32, 0.12);
+  const talonL = new THREE.Mesh(talonGeo, talonMat);
+  talonL.position.set(-0.2, -0.28, 0.2);
+  group.add(talonL);
+
+  const talonR = new THREE.Mesh(talonGeo, talonMat);
+  talonR.position.set(0.2, -0.28, 0.2);
+  group.add(talonR);
+
+  // Store wing groups for flapping animation
+  group.userData = {
+    leftWing: leftWingGroup,
+    rightWing: rightWingGroup,
+  };
+
+  return group;
+}
+
+/**
  * Builds Brilliant Minecraft Diamond (Collectible)
  * Brilliant, sparkling sky-blue & white faceted diamond.
  * Rotates smoothly in mid-air at 0.8m height.

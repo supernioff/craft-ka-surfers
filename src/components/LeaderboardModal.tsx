@@ -10,6 +10,7 @@ interface LeaderboardModalProps {
   currentUserId?: string;
   personalBest?: number;
   displayName?: string;
+  diamonds?: number;
 }
 
 export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
@@ -18,6 +19,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
   currentUserId,
   personalBest = 0,
   displayName = 'Steve',
+  diamonds = 0,
 }) => {
   const [scores, setScores] = useState<HighScoreRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -37,25 +39,35 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             const uid = data.userId || docSnap.id;
-            const score = data.score || 0;
+            const score = Number(data.score) || 0;
+            const docCoins = Math.max(
+              Number(data.coins) || 0,
+              Number(data.diamonds) || 0,
+              Number(data.lifetimeCoins) || 0
+            );
+            const isCurrent = Boolean(currentUserId && uid === currentUserId);
+            const effectiveCoins = isCurrent ? Math.max(docCoins, diamonds) : docCoins;
+
             const existing = userBestMap.get(uid);
 
-            if (!existing || score > existing.score) {
+            if (!existing || score > existing.score || effectiveCoins > existing.coins) {
               userBestMap.set(uid, {
                 id: docSnap.id,
                 userId: uid,
                 displayName: data.displayName || 'Steve',
-                score,
-                distance: data.distance || 0,
-                coins: data.coins || 0,
+                score: Math.max(score, existing?.score || 0),
+                distance: Math.max(Number(data.distance) || 0, existing?.distance || 0),
+                coins: Math.max(effectiveCoins, existing?.coins || 0),
                 createdAt: data.createdAt || '',
               });
             }
           });
 
-          // Ensure active player's personal best is included
-          if (currentUserId && personalBest > 0) {
+          // Ensure active player's personal best and diamond count is included
+          if (currentUserId && (personalBest > 0 || diamonds > 0)) {
             const currentEntry = userBestMap.get(currentUserId);
+            const activeDiamonds = Math.max(diamonds, currentEntry?.coins || 0);
+
             if (!currentEntry) {
               userBestMap.set(currentUserId, {
                 id: `local_${currentUserId}`,
@@ -63,11 +75,16 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 displayName: displayName || currentUserId,
                 score: personalBest,
                 distance: 0,
-                coins: 0,
+                coins: activeDiamonds,
                 createdAt: new Date().toISOString(),
               });
-            } else if (personalBest > currentEntry.score) {
-              currentEntry.score = personalBest;
+            } else {
+              if (personalBest > currentEntry.score) {
+                currentEntry.score = personalBest;
+              }
+              if (activeDiamonds > currentEntry.coins) {
+                currentEntry.coins = activeDiamonds;
+              }
             }
           }
 
@@ -77,8 +94,8 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
         },
         (error) => {
           console.warn('Firestore fetch warning:', error);
-          // Fallback to local personal best if offline or initial load
-          if (currentUserId && personalBest > 0) {
+          // Fallback to local personal best and diamonds if offline or initial load
+          if (currentUserId && (personalBest > 0 || diamonds > 0)) {
             setScores([
               {
                 id: `local_${currentUserId}`,
@@ -86,7 +103,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                 displayName: displayName || currentUserId,
                 score: personalBest,
                 distance: 0,
-                coins: 0,
+                coins: diamonds,
                 createdAt: new Date().toISOString(),
               },
             ]);
@@ -98,7 +115,7 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
       return () => unsubscribe();
     } catch (err) {
       console.warn('Leaderboard fetch error:', err);
-      if (currentUserId && personalBest > 0) {
+      if (currentUserId && (personalBest > 0 || diamonds > 0)) {
         setScores([
           {
             id: `local_${currentUserId}`,
@@ -106,14 +123,14 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
             displayName: displayName || currentUserId,
             score: personalBest,
             distance: 0,
-            coins: 0,
+            coins: diamonds,
             createdAt: new Date().toISOString(),
           },
         ]);
       }
       setLoading(false);
     }
-  }, [isOpen, currentUserId, personalBest, displayName]);
+  }, [isOpen, currentUserId, personalBest, displayName, diamonds]);
 
   if (!isOpen) return null;
 
@@ -144,17 +161,23 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
           </button>
         </div>
 
-        {/* Current Player High Score Bar */}
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-5 py-2.5 flex items-center justify-between">
+        {/* Current Player High Score & Diamonds Bar */}
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 sm:px-5 py-2.5 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-minecraft text-amber-300">YOUR HIGH SCORE:</span>
+            <span className="text-xs font-minecraft text-amber-300">YOUR STATS:</span>
             <span className="text-xs font-mono px-1.5 py-0.5 bg-black/40 border border-amber-500/30 text-amber-200 rounded">
               ID: {currentUserId || 'Miner'}
             </span>
           </div>
-          <span className="font-minecraft text-sm text-yellow-400 font-bold">
-            {personalBest.toLocaleString()} <span className="text-xs text-yellow-500/80 font-sans">pts</span>
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="font-minecraft text-xs sm:text-sm text-yellow-400 font-bold">
+              {personalBest.toLocaleString()} <span className="text-[10px] text-yellow-500/80 font-sans">pts</span>
+            </span>
+            <span className="font-minecraft text-xs sm:text-sm text-cyan-300 font-bold flex items-center gap-1">
+              <span>💎</span>
+              <span>{(diamonds || 0).toLocaleString()}</span>
+            </span>
+          </div>
         </div>
 
         {/* Content */}
@@ -210,8 +233,8 @@ export const LeaderboardModal: React.FC<LeaderboardModalProps> = ({
                         <span className="text-[10px] font-mono bg-cyan-500/15 text-cyan-300 px-1.5 py-0.2 rounded border border-cyan-500/30">
                           ID: {record.userId}
                         </span>
-                        <span className="text-[11px] text-gray-400 font-sans">
-                          • {record.coins} Diamonds 💎
+                        <span className="text-[11px] text-cyan-300 font-sans font-medium">
+                          • {record.coins.toLocaleString()} Diamonds 💎
                         </span>
                       </div>
                     </div>
