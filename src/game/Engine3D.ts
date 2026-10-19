@@ -130,6 +130,8 @@ export class Engine3D {
   private obsBox = new THREE.Box3();
 
   private resizeObserver: ResizeObserver | null = null;
+  private lastWidth: number = 0;
+  private lastHeight: number = 0;
 
   constructor(container: HTMLElement, seed: number = 1337) {
     this.container = container;
@@ -1199,10 +1201,24 @@ export class Engine3D {
       this.ghostDog.group.visible = isVisible;
     }
 
-    // Lane interpolation (Subway Surfers snappy slide)
-    this.playerGroup.position.x += (this.targetX - this.playerGroup.position.x) * (20 * delta);
+    // Lane interpolation: Frame-rate independent exponential smoothing with precise snapping
+    const laneDist = this.targetX - this.playerGroup.position.x;
+    if (Math.abs(laneDist) < 0.005) {
+      this.playerGroup.position.x = this.targetX;
+    } else {
+      const moveFactor = 1 - Math.exp(-22 * delta);
+      this.playerGroup.position.x += laneDist * moveFactor;
+    }
     this.playerState.x = this.playerGroup.position.x;
     this.playerGroup.position.z = this.playerState.z;
+
+    // Subtle, clean body roll banking into the turn (smoothly returns to 0 when settled)
+    const shiftVel = this.targetX - this.playerGroup.position.x;
+    const targetRoll = Math.abs(shiftVel) > 0.04 ? THREE.MathUtils.clamp(-shiftVel * 0.05, -0.1, 0.1) : 0;
+    this.playerGroup.rotation.z += (targetRoll - this.playerGroup.rotation.z) * (1 - Math.exp(-18 * delta));
+    if (Math.abs(this.playerGroup.rotation.z) < 0.001) {
+      this.playerGroup.rotation.z = 0;
+    }
 
     // Jump / Gravity / Dive Physics
     if (this.playerState.isJumping) {
@@ -1323,9 +1339,11 @@ export class Engine3D {
       return;
     }
 
-    // Sunlight follows player for crisp real-time shadows
+    // Sunlight follows player smoothly for crisp, non-jittering real-time shadows
     if (this.sunLight) {
+      this.sunLight.position.x = this.playerGroup.position.x + 25;
       this.sunLight.position.z = this.playerState.z + 18;
+      this.sunLight.target.position.x = this.playerGroup.position.x;
       this.sunLight.target.position.z = this.playerState.z - 6;
       this.sunLight.target.updateMatrixWorld();
     }
@@ -1401,15 +1419,22 @@ export class Engine3D {
     }
 
     // Camera follow: Smooth, rock-solid tracking (ZERO SCREEN SHAKE ON TURNS!)
-    const targetCamX = this.targetX * 0.48;
-    this.camera.position.x += (targetCamX - this.camera.position.x) * Math.min(1, 10 * delta);
+    const targetCamX = this.targetX * 0.52;
+    const camDist = targetCamX - this.camera.position.x;
+    if (Math.abs(camDist) < 0.004) {
+      this.camera.position.x = targetCamX;
+    } else {
+      const camFactor = 1 - Math.exp(-14 * delta);
+      this.camera.position.x += camDist * camFactor;
+    }
     this.camera.position.z = this.playerState.z + this.baseCamZOffset;
     this.camera.position.y = this.baseCamYOffset + (this.playerState.y * 0.12);
 
-    // Look straight forward along camera's track trajectory (NO opposing lateral yaw!)
+    // Look directly forward down the rails with camera's own X coordinate
+    // Eliminates all yaw angle oscillation, diagonal view tilting, and camera shake after shifting
     this.camera.lookAt(
-      this.camera.position.x * 0.65,
-      this.baseLookAtY + this.playerState.y * 0.12,
+      this.camera.position.x,
+      this.baseLookAtY + (this.playerState.y * 0.12),
       this.playerState.z - 15
     );
 
@@ -1672,7 +1697,9 @@ export class Engine3D {
       this.baseLookAtY = 2.0;
     }
     this.camera.fov = this.baseFov;
-    this.camera.position.set(0, this.baseCamYOffset, this.baseCamZOffset);
+    if (!this.isPlayingGame && !this.isIntro) {
+      this.camera.position.set(0, this.baseCamYOffset, this.baseCamZOffset);
+    }
     this.camera.updateProjectionMatrix();
   }
 
@@ -1680,9 +1707,13 @@ export class Engine3D {
     if (this.isDestroyed || !this.container) return;
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
+    if (width === this.lastWidth && height === this.lastHeight) return;
+    this.lastWidth = width;
+    this.lastHeight = height;
+
     this.updateCameraProjection(width, height);
-    this.renderer.setSize(width, height);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.setSize(width, height, false);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
   };
 
   public reset(seed: number = Date.now()) {

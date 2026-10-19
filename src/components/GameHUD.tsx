@@ -422,6 +422,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           <button
             id="mobile-touch-left"
             onClick={onMoveLeft}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onMoveLeft();
+            }}
             className="w-13 h-13 min-[380px]:w-15 min-[380px]:h-15 sm:w-16 sm:h-16 bg-slate-900/85 hover:bg-slate-900 active:scale-90 active:bg-cyan-900/60 border-2 border-slate-600 active:border-cyan-400 rounded-2xl flex items-center justify-center text-slate-200 active:text-cyan-300 shadow-xl transition-transform cursor-pointer backdrop-blur-md touch-none"
             aria-label="Move Left"
           >
@@ -431,6 +435,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           <button
             id="mobile-touch-right"
             onClick={onMoveRight}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onMoveRight();
+            }}
             className="w-13 h-13 min-[380px]:w-15 min-[380px]:h-15 sm:w-16 sm:h-16 bg-slate-900/85 hover:bg-slate-900 active:scale-90 active:bg-cyan-900/60 border-2 border-slate-600 active:border-cyan-400 rounded-2xl flex items-center justify-center text-slate-200 active:text-cyan-300 shadow-xl transition-transform cursor-pointer backdrop-blur-md touch-none"
             aria-label="Move Right"
           >
@@ -448,6 +456,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           <button
             id="mobile-touch-slide"
             onClick={onSlide}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onSlide();
+            }}
             className="w-13 h-13 min-[380px]:w-15 min-[380px]:h-15 sm:w-16 sm:h-16 bg-slate-900/85 hover:bg-slate-900 active:scale-90 active:bg-amber-900/60 border-2 border-amber-600/70 active:border-amber-400 rounded-2xl flex flex-col items-center justify-center text-amber-300 shadow-xl transition-transform cursor-pointer backdrop-blur-md touch-none"
             aria-label="Slide / Duck"
           >
@@ -458,6 +470,10 @@ export const GameHUD: React.FC<GameHUDProps> = ({
           <button
             id="mobile-touch-jump"
             onClick={onJump}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onJump();
+            }}
             className="w-13 h-13 min-[380px]:w-15 min-[380px]:h-15 sm:w-16 sm:h-16 bg-slate-900/85 hover:bg-slate-900 active:scale-90 active:bg-emerald-900/60 border-2 border-emerald-600/70 active:border-emerald-400 rounded-2xl flex flex-col items-center justify-center text-emerald-300 shadow-xl transition-transform cursor-pointer backdrop-blur-md touch-none"
             aria-label="Jump"
           >
